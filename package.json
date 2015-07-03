@@ -1,0 +1,23 @@
+{
+  "name": "america-online",
+  "version": "1.0.0",
+  "description": "## Socket server and web chat client using socket.io",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daniel-turner/America-Online.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/daniel-turner/America-Online/issues"
+  },
+  "homepage": "https://github.com/daniel-turner/America-Online#readme",
+  "dependencies": {
+    "socket.io": "^1.3.5"
+  }
+}

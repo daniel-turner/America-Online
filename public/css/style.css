@@ -1,0 +1,14 @@
+#chatlog p b{
+  margin-right:6px;
+}
+
+.error {
+  color: red;
+}
+
+#chatlog {
+  width: 600px;
+  height: 300px;
+  overflow: auto;
+  border: 1px solid black;
+}
