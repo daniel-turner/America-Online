@@ -1,30 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Broadcast Channel</title>
-  <link rel='stylesheet' href='css/styles.css'>
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8">
+    <title>Broadcast Channel</title>
+    <link rel='stylesheet' href='css/style.css'>
+  </head>
+  <body>
+    <div id="registration">
+      <h2>Enter a nickname</h2>
+      <h3 id="nickname_error" class="error"></h3>
+      <form action="" id="registration_form">
+        <input type="text" id="nickname">
+        <button>Sign In</button>
+      </form>
+    </div>
+    <div id="chatroom">
+      <div id="chatContainer">
+        <div id="chatlog"></div>
+        <form id="messageForm" action="">
+          <input type="text" id="message" placeholder="Message...">
+          <button id="send">Send</button>
+        </form>
+      </div>
+      <div id="connectedUsersContainer">
+        <ul id="userList"></ul>
+      </div>
+    </div>
 
-<div id="registration">
-  <h2>Enter a nickname</h2>
-  <h3 id="nickname_error" class="error"></h3>
-  <form action="" id="registration_form">
-    <input type="text" id="nickname">
-    <button>Sign In</button>
-  </form>
-</div>
-  <div id="chatroom">
-    <div id="chatlog"></div>
-    <form id="messageForm" action="">
-      <input type="text" id="message" placeholder="Message...">
-      <button id="send">Send</button>
-    </form>
-  </div>
-
-  <script src="bower_components/jquery/dist/jquery.min.js" ></script>
-  <script src="bower_components/socket.io-client/socket.io.js"></script>
-  <script src="js/client.js"></script>
-</body>
+    <script src="bower_components/jquery/dist/jquery.min.js" ></script>
+    <script src="bower_components/socket.io-client/socket.io.js"></script>
+    <script src="bower_components/moment/moment.js"></script>
+    <script src="js/client.js"></script>
+  </body>
 </html>
