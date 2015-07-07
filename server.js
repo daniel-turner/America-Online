@@ -8,15 +8,16 @@ var SERVER_USER = "admin";
 var socketIO = require("socket.io");
 var moment = require("moment");
 var nicknames = {};
+var SERVER_RATE_LIMIT = 10;
+var SERVER_RATE_INTERVAL = 1000;
+var SERVER_AUTOKICK_LIMIT = 3;
+var rates = {};
+var bans = {};
 
 function processServerCommands(chunk) {
 
-  var namespace = server.of("/");
+
   process.stdout.setEncoding('utf8');
-
-  // console.log(namespace.connected);
-
-  var connections = namespace.connected;
 
   var commandInput = chunk.substring(0,chunk.length-1).split(" ");
 
@@ -42,41 +43,96 @@ function processServerCommands(chunk) {
         return;
       }
 
-      for(var id in connections) {
+      var socket = getClientByNickname(commandInput[1]);
 
-        if(connections[id].nickname === commandInput[1]) {
+      if(socket === null) {
 
-          var reason = null;
-
-          if(commandInput.length > 2) {
-
-            commandInput.splice(0,2);
-
-            reason = commandInput.join(" ");
-          }
-
-          connections[id].emit(SOCKET_USER_KICK, {
-
-            reason:reason
-          });
-
-          server.emit(SOCKET_USER_MESSAGE,
-                                SERVER_USER,
-                                commandInput[1] + " is being kicked.");
-
-          var ip = connections[id].handshake.address;
-          var nickname = connections[id].nickname;
-
-          connections[id].disconnect(true);
-
-          process.stdout.write(nickname + " at " + ip + " has been kicked.");
-
-          return;
-        }
+        process.stdout.write("Could not find client to ban");
+        return;
       }
 
-      process.stdout.write("Could not find user to kick");
+      var reason = "no reason specified";
+
+      if(commandInput.length > 2) {
+
+        commandInput.splice(0,2);
+
+        reason = commandInput.join(" ");
+      }
+
+      kickUser(socket, reason);
       break;
+
+    case "/ban":
+
+      if(commandInput.length < 2) {
+
+        process.stdout.write("Must specify a username or ip address to ban");
+        return;
+      }
+
+      var ban = getBannedUserByNickname(commandInput[1]);
+
+      if(ban === null) {
+
+        ban = getBannedUserByIP(commandInput[1]);
+      }
+
+      if(ban !== null) {
+
+        process.stdout.write("User already banned");
+        return;
+      }
+
+      var client = getClientByNickname(commandInput[1]);
+
+      if(client === null) {
+
+        client = getBannedUserByIP(commandInput[1]);
+      }
+
+      if(client === null) {
+
+        process.stdout.write("Could not locate client to ban");
+        return;
+      }
+
+      server.emit(SOCKET_USER_MESSAGE, SERVER_USER, client.nickname + " is now banned.");
+      bans[client.nickname] = {
+        nickname:client.nickname,
+        ipAddress:client.handshake.address
+      };
+
+      kickUser(client, "banhammer");
+      break;
+
+    case "/unban":
+
+      if(commandInput.length < 2) {
+
+        process.stdout.write("Must specify a username or ip address to unban");
+        return;
+      }
+
+      var ban = getBannedUserByNickname(commandInput[1]);
+
+      if(ban === null) {
+
+        ban = getBannedUserByIP(commandInput[1]);
+      }
+
+      if(ban === null) {
+
+        process.stdout.write("Could not find nickname/IP address on ban list");
+        return;
+      }
+
+      delete bans[nickname];
+      server.emit(SOCKET_USER_MESSAGE,
+                  SERVER_USER,
+                  ban.nickname + " has been removed from ban list");
+      process.stdout.write(ban.nickname + " has been removed from ban list");
+      return;
 
     default:
 
@@ -99,13 +155,26 @@ server.sockets.on(SOCKET_CONNECTION, function(socket) {
 
   socket.on(SOCKET_USER_MESSAGE, function(message) {
 
-    // var timeStamp = moment().format("h:mm:ss a");
+    var limited = checkRateLimiter(socket);
 
     //broadcast this message to all connections
-    socket.broadcast.emit(SOCKET_USER_MESSAGE, socket.nickname, message);
+    if(!limited)  {
+
+      socket.broadcast.emit(SOCKET_USER_MESSAGE, socket.nickname, message);
+    }
   });
 
-  socket.on(SOCKET_USER_REGISTRATION, function(nickname,callback) {
+  socket.on(SOCKET_USER_REGISTRATION, function(nickname, callback) {
+
+    if(getBannedUserByNickname(nickname)) {
+
+      socket.disconnect(true);
+    }
+
+    if(getBannedUserByIP(socket.handshake.address)) {
+
+      socket.disconnect(true);
+    }
 
     if(nicknames.hasOwnProperty(nickname)) { //not available
 
@@ -113,17 +182,122 @@ server.sockets.on(SOCKET_CONNECTION, function(socket) {
 
     } else { //available
 
-      nicknames[nickname] = nickname;
+      nicknames[nickname] = {
+        nickname: nickname,
+        rate_violations : 0
+      };
+
+      rates[nickname] = [];
       var nicknameList = Object.keys(nicknames).sort();
-      console.log(nicknameList);
+      // console.log(nicknameList);
 
       socket.nickname = nickname;
 
-      socket.broadcast.emit(SOCKET_USER_MESSAGE, SERVER_USER, nickname + " has connected");
+      socket.broadcast.emit(SOCKET_USER_MESSAGE,
+                            SERVER_USER,
+                            nickname + " has connected");
       server.emit(SOCKET_USERLIST_UPDATE, nicknameList);
       callback(true);
     }
   });
 });
 
+function kickUser(client, reason) {
 
+  client.emit(SOCKET_USER_KICK, {
+
+    reason:reason
+  });
+
+  server.emit(SOCKET_USER_MESSAGE,
+                        SERVER_USER,
+                        client.nickname + " is being kicked.");
+
+  var ip = client.handshake.address;
+  var nickname = client.nickname;
+  delete nicknames[nickname];
+
+  client.disconnect(true);
+
+  process.stdout.write(nickname + " at " + ip + " has been kicked.");
+
+};
+
+function checkRateLimiter(socket, message) {
+
+  var clientNickname = socket.nickname;
+
+  var rateQueue = rates[clientNickname];
+
+  console.log(rateQueue);
+
+  rateQueue.push(Date.now());
+
+  while(rateQueue[0] + SERVER_RATE_INTERVAL < Date.now()) {
+
+    rateQueue.shift();
+    console.log("popping queue");
+  }
+
+  if(rateQueue.length > SERVER_RATE_LIMIT) {
+
+    server.emit(SOCKET_USER_MESSAGE, SERVER_USER, clientNickname +
+                " has reached the allowed message limit");
+
+    nicknames[clientNickname].rate_violations++;
+
+    if(nicknames[clientNickname].rate_violations > SERVER_AUTOKICK_LIMIT) {
+
+      kickUser(socket, "Too many violations of the message limit");
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+function getBannedUserByNickname(nickname) {
+
+  if(bans.hasOwnProperty(nickname)) {
+
+    return bans[nickname];
+  }
+
+  return null;
+
+};
+
+function getBannedUserByIP(ip) {
+
+  var banList = Object.keys(bans);
+
+  for(var i = 0; i < banList.length; i++) {
+
+    if(bans[banList[i]].ipAddress === ip) {
+
+      return bans[banList[i]];
+    }
+  }
+
+  return null;
+
+};
+
+function getClientByNickname(nickname) {
+
+  var namespace = server.of("/");
+  var connections = namespace.connected;
+
+  for(var id in connections) {
+
+    if(connections[id].nickname === nickname) {
+
+
+
+      return connections[id];
+    }
+  }
+
+  return null;
+};
