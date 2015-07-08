@@ -12,6 +12,7 @@
   var SERVER_USER = "admin";
   var SOCKET_USER_REGISTRATION = "user registration";
   var SOCKET_USERLIST_UPDATE = "userlist update";
+  var SOCKET_PRIVATE_MESSAGE = "pm";
   var myNickname = "";
 
   //manage state
@@ -53,6 +54,16 @@
   socket.on(SOCKET_USER_KICK, function(reason) {
 
     message(SERVER_USER, "Contemplate your sin: " + reason.reason);
+
+    $('#registration_error').text("You have been kicked. Reason: " + reason.reason);
+    changeStateToRegistration();
+  });
+
+  socket.on(SOCKET_PRIVATE_MESSAGE, function(messagePackage) {
+
+    var sender = "Private message from " + messagePackage.sender;
+
+    message(sender, messagePackage.message);
   });
 
   socket.on(SOCKET_USER_MESSAGE, function(from, userMessage) {
@@ -72,12 +83,11 @@
 
     var formattedNickname = $("<span>", {
 
-      text: myNickname,
+      text: " " + myNickname + " ",
       class: "mention"
     });
 
-    var mentionedMessage = message.replace(myNickname, formattedNickname.get(0).outerHTML);
-    mentionedMessage = mentionedMessage.replace(myNickname.toLowerCase(), formattedNickname.get(0).outerHTML);
+    var mentionedMessage = message.replace(" " + myNickname + " ", formattedNickname.get(0).outerHTML);
 
     var fromTag = $('<b>', {
         html:from
@@ -97,8 +107,10 @@
     newMessage.append(fromTag);
     newMessage.append(messageTag);
 
+    // console.log(newMessage);
+
     $('#chatlog').append(newMessage).get(0).scrollTop = 100000000;
-  }
+  };
 
   function connectedUsersUpdate(connectedUsers) {
 
@@ -111,16 +123,21 @@
       listItem = document.createElement("li");
       listItem.innerHTML = user;
       list.append(listItem);
-    })
+    });
   };
 
   $('#messageForm').submit(function() {
     var messageField = $('#message');
     var theMessage = messageField.val();
-    //add message to chatlog
-    message(myNickname,theMessage);
-    //send message to server
-    socket.emit(SOCKET_USER_MESSAGE, theMessage);
+
+    theMessage = processClientCommands(theMessage);
+
+    if(theMessage !== null) {
+      //add message to chatlog
+      message(myNickname,theMessage);
+      //send message to server
+      socket.emit(SOCKET_USER_MESSAGE, theMessage);
+    }
     //clear message input field
     messageField.val('');
 
@@ -142,12 +159,65 @@
 
       } else {// else show error
 
-        $('#nickname_error').text('Nickname is taken!');
+        $('#registration_error').text('Nickname is taken!');
       }
 
     });
     return false;
   });
+
+  function processClientCommands(message) {
+
+    var commandInput = message.split(" ");
+
+    if(commandInput.length < 1) {
+
+      return message;
+    }
+
+    switch(commandInput[0]) {
+
+      case "/pm":
+
+        if(commandInput.length < 2) {
+
+          $('#chatlog').append("Recipient of private message is unspecified").get(0).scrollTop = 100000000;
+          return null;
+        }
+
+        var target;
+
+        if(commandInput.length < 3) {
+
+          theMessage = "";
+          target = commandInput[1];
+
+        } else {
+
+          target = commandInput[1];
+          commandInput.splice(0,2);
+          theMessage = commandInput.join(" ");
+        }
+
+        socket.emit(SOCKET_PRIVATE_MESSAGE, {
+
+          target: target,
+          sender: myNickname,
+          message: theMessage
+        });
+
+        var from = "Private Message To: " + target;
+
+        message(from, theMessage);
+        return null;
+        break;
+
+      default:
+        return message;
+    }
+
+    return message;
+  };
 
   function changeStateToChatRoom() {
 
@@ -155,4 +225,10 @@
     // connectedUsersContainer.show();
     registration.hide();
   };
+
+  // function changeStateToRegistration() {
+
+  //   chatroom.hide();
+  //   registration.show();
+  // };
 })();
