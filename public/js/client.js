@@ -226,9 +226,9 @@
     registration.hide();
   };
 
-  // function changeStateToRegistration() {
+  function changeStateToRegistration() {
 
-  //   chatroom.hide();
-  //   registration.show();
-  // };
+    chatroom.hide();
+    registration.show();
+  };
 })();
